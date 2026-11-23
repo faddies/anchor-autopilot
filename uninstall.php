@@ -17,6 +17,8 @@ function aa_uninstall_site() {
 		return;
 	}
 	$table = $wpdb->prefix . 'aa_rules';
+	$wpdb->query( "DROP TABLE IF EXISTS {$wpdb->prefix}aa_log" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	delete_option( 'aa_scan' );
 	$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	delete_option( 'aa_settings' );
 	delete_option( 'aa_db_version' );

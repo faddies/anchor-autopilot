@@ -15,6 +15,9 @@ if ( ! class_exists( 'WP_List_Table' ) ) {
 
 class AA_Rules_Table extends WP_List_Table {
 
+	private $scan   = array( 'state' => 'none' );
+	private $counts = array();
+
 	public function __construct() {
 		parent::__construct(
 			array(
@@ -31,6 +34,7 @@ class AA_Rules_Table extends WP_List_Table {
 			'anchor'  => __( 'Anchor text', 'anchor-autopilot' ),
 			'target'  => __( 'Links to', 'anchor-autopilot' ),
 			'scope'   => __( 'Applies to', 'anchor-autopilot' ),
+			'live'    => __( 'Live links', 'anchor-autopilot' ),
 			'options' => __( 'Options', 'anchor-autopilot' ),
 			'status'  => __( 'Status', 'anchor-autopilot' ),
 			'created' => __( 'Added', 'anchor-autopilot' ),
@@ -91,6 +95,12 @@ class AA_Rules_Table extends WP_List_Table {
 		}
 		$res = AA_DB::query( $args );
 		$this->items = $res['rows'];
+		$ids = array();
+		foreach ( $this->items as $it ) {
+			$ids[] = (int) $it->id;
+		}
+		$this->scan   = AA_Report::scan_info();
+		$this->counts = AA_Report::counts_for( $ids );
 		$this->_column_headers = array( $this->get_columns(), array(), $this->get_sortable_columns() );
 		$this->set_pagination_args(
 			array(
@@ -129,6 +139,19 @@ class AA_Rules_Table extends WP_List_Table {
 			return '<span class="aa-badge aa-badge-page">' . esc_html__( 'One page', 'anchor-autopilot' ) . '</span><br><a href="' . esc_url( $item->from_url ) . '" target="_blank" rel="noopener">' . esc_html( $this->cut( $short, 50 ) ) . '</a>';
 		}
 		return '<span class="aa-badge aa-badge-kw">' . esc_html__( 'Whole site', 'anchor-autopilot' ) . '</span>';
+	}
+
+	protected function column_live( $item ) {
+		$url = admin_url( 'admin.php?page=aa-report&rule=' . (int) $item->id );
+		if ( 'done' !== $this->scan['state'] ) {
+			return '<a href="' . esc_url( admin_url( 'admin.php?page=aa-report' ) ) . '" class="description">' . esc_html__( 'Not scanned', 'anchor-autopilot' ) . '</a>';
+		}
+		$c = isset( $this->counts[ (int) $item->id ] ) ? $this->counts[ (int) $item->id ] : array( 'pages' => 0, 'links' => 0 );
+		if ( 0 === (int) $c['pages'] ) {
+			return '<a href="' . esc_url( $url ) . '"><span class="aa-badge aa-badge-off">' . esc_html__( '0 pages', 'anchor-autopilot' ) . '</span></a>';
+		}
+		/* translators: 1: links, 2: pages */
+		return '<a href="' . esc_url( $url ) . '">' . esc_html( sprintf( _n( '%1$d link on %2$d page', '%1$d links on %2$d pages', (int) $c['pages'], 'anchor-autopilot' ), (int) $c['links'], (int) $c['pages'] ) ) . '</a>';
 	}
 
 	protected function column_options( $item ) {

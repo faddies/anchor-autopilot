@@ -276,5 +276,12 @@ check( 'external host kept apart', '//other.com/x' === AA_Url::key( 'https://oth
 check( 'mailto/tel/#/javascript ignored', '' === AA_Url::key( 'mailto:a@b.com' ) && '' === AA_Url::key( 'tel:123' ) && '' === AA_Url::key( '#top' ) && '' === AA_Url::key( 'javascript:void(0)' ) );
 check( '?p=ID kept for plain permalinks', '/?p=12' === AA_Url::key( 'https://example.com/?p=12&utm=a' ) );
 
+
+echo "\n== Report detail: destination already linked by hand ==\n";
+$page = '<p>Good on-page SEO matters. See <a href="/on-page-seo">our on-page SEO guide</a> too.</p>';
+list( $out, $rep ) = run( $page, array( rule( 1, 'on-page SEO', '/on-page-seo' ) ) );
+check( 'existing manual link to same URL: no second link', $out === $page, $out );
+check( 'skip reason is already_linked with detail "existing"', 1 === count( $rep['skipped'] ) && 'already_linked' === $rep['skipped'][0]['reason'] && 'existing' === $rep['skipped'][0]['detail'], json_encode( $rep['skipped'] ) );
+
 echo "\n$pass passed, $fail failed\n";
 exit( $fail ? 1 : 0 );

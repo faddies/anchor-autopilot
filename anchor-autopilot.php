@@ -3,7 +3,7 @@
  * Plugin Name:       Anchor Autopilot – Auto Internal Links
  * Plugin URI:        https://fahadbinzafar.com/
  * Description:       Automatically links your chosen phrases to your chosen URLs, inside body content only. Smart about overlapping phrases, never touches menus, footers, headings, alt text or hidden content. Add rules one by one or by CSV, site-wide or for one specific page.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 5.8
  * Requires PHP:      7.4
  * Author:            Fahad
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'AA_VERSION', '1.0.0' );
+define( 'AA_VERSION', '1.1.0' );
 define( 'AA_FILE', __FILE__ );
 define( 'AA_PATH', plugin_dir_path( __FILE__ ) );
 define( 'AA_URL', plugin_dir_url( __FILE__ ) );
@@ -35,6 +35,7 @@ require_once AA_PATH . 'includes/class-aa-frontend.php';
 if ( is_admin() ) {
 	require_once AA_PATH . 'includes/class-aa-csv.php';
 	require_once AA_PATH . 'includes/class-aa-conflicts.php';
+	require_once AA_PATH . 'includes/class-aa-report.php';
 	require_once AA_PATH . 'includes/class-aa-rules-table.php';
 	require_once AA_PATH . 'includes/class-aa-admin.php';
 }

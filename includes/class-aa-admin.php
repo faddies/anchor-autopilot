@@ -26,6 +26,9 @@ class AA_Admin {
 		add_action( 'admin_post_aa_import', array( __CLASS__, 'handle_import' ) );
 		add_action( 'admin_post_aa_export', array( __CLASS__, 'handle_export' ) );
 		add_action( 'admin_post_aa_sample', array( __CLASS__, 'handle_sample' ) );
+		add_action( 'admin_post_aa_check_page', array( __CLASS__, 'handle_check_page' ) );
+		add_action( 'admin_post_aa_export_report', array( 'AA_Report', 'handle_export' ) );
+		add_action( 'wp_ajax_aa_scan', array( 'AA_Report', 'ajax_scan' ) );
 		add_action( 'admin_post_aa_save_settings', array( __CLASS__, 'handle_settings' ) );
 		add_action( 'load-toplevel_page_aa-rules', array( __CLASS__, 'handle_bulk' ) );
 
@@ -37,6 +40,7 @@ class AA_Admin {
 		$cap = self::cap();
 		add_menu_page( __( 'Anchor Autopilot', 'anchor-autopilot' ), __( 'Anchor Autopilot', 'anchor-autopilot' ), $cap, 'aa-rules', array( __CLASS__, 'page_rules' ), 'dashicons-admin-links', 58 );
 		add_submenu_page( 'aa-rules', __( 'Rules', 'anchor-autopilot' ), __( 'Rules', 'anchor-autopilot' ), $cap, 'aa-rules', array( __CLASS__, 'page_rules' ) );
+		add_submenu_page( 'aa-rules', __( 'Link Report', 'anchor-autopilot' ), __( 'Link Report', 'anchor-autopilot' ), $cap, 'aa-report', array( __CLASS__, 'page_report' ) );
 		add_submenu_page( 'aa-rules', __( 'Import / Export', 'anchor-autopilot' ), __( 'Import / Export', 'anchor-autopilot' ), $cap, 'aa-import', array( __CLASS__, 'page_import' ) );
 		add_submenu_page( 'aa-rules', __( 'Conflicts', 'anchor-autopilot' ), __( 'Conflicts', 'anchor-autopilot' ), $cap, 'aa-conflicts', array( __CLASS__, 'page_conflicts' ) );
 		add_submenu_page( 'aa-rules', __( 'Test', 'anchor-autopilot' ), __( 'Test', 'anchor-autopilot' ), $cap, 'aa-test', array( __CLASS__, 'page_test' ) );
@@ -58,6 +62,16 @@ class AA_Admin {
 		}
 		wp_enqueue_style( 'aa-admin', AA_URL . 'assets/admin.css', array(), AA_VERSION );
 		wp_enqueue_script( 'aa-admin', AA_URL . 'assets/admin.js', array(), AA_VERSION, true );
+		wp_localize_script(
+			'aa-admin',
+			'aaScan',
+			array(
+				'ajax'     => admin_url( 'admin-ajax.php' ),
+				'nonce'    => wp_create_nonce( 'aa_scan' ),
+				'scanning' => __( 'Scanning… %1$d of %2$d pages', 'anchor-autopilot' ),
+				'failed'   => __( 'The scan stopped (server error). Run it again; it starts over.', 'anchor-autopilot' ),
+			)
+		);
 		wp_localize_script( 'aa-admin', 'aaI18n', array( 'confirmDelete' => __( 'Delete this rule?', 'anchor-autopilot' ), 'confirmReplace' => __( 'This deletes all existing rules of this kind before importing. Continue?', 'anchor-autopilot' ) ) );
 	}
 
@@ -101,6 +115,7 @@ class AA_Admin {
 	private static function header( $title, $current ) {
 		$tabs = array(
 			'aa-rules'     => __( 'Rules', 'anchor-autopilot' ),
+			'aa-report'    => __( 'Link Report', 'anchor-autopilot' ),
 			'aa-import'    => __( 'Import / Export', 'anchor-autopilot' ),
 			'aa-conflicts' => __( 'Conflicts', 'anchor-autopilot' ),
 			'aa-test'      => __( 'Test', 'anchor-autopilot' ),
@@ -145,6 +160,32 @@ class AA_Admin {
 		echo '</div>';
 	}
 
+	public static function page_report() {
+		self::guard_page();
+		$v = AA_Report::view_data();
+		self::header( __( 'Link Report', 'anchor-autopilot' ), 'aa-report' );
+		include AA_PATH . 'admin/views/report.php';
+		echo '</div>';
+	}
+
+	public static function handle_check_page() {
+		self::guard( 'aa_check_page' );
+		$ref = isset( $_POST['page_ref'] ) ? sanitize_text_field( wp_unslash( $_POST['page_ref'] ) ) : '';
+		$p   = null;
+		if ( ctype_digit( $ref ) ) {
+			$p = get_post( (int) $ref );
+		} elseif ( '' !== $ref ) {
+			$id = (int) url_to_postid( $ref );
+			$p  = $id ? get_post( $id ) : null;
+		}
+		if ( ! $p ) {
+			self::notice( 'error', esc_html__( 'Could not find that page. Enter its full URL or its post ID.', 'anchor-autopilot' ) );
+			self::back( 'aa-report', array( 'tab' => 'page' ) );
+		}
+		AA_Report::scan_post( $p );
+		self::back( 'aa-report', array( 'tab' => 'page', 'post' => $p->ID ) );
+	}
+
 	public static function page_import() {
 		self::guard_page();
 		$result = get_transient( 'aa_import_' . get_current_user_id() );
@@ -177,7 +218,17 @@ class AA_Admin {
 			case 'self':
 				return __( 'This page is the destination (a page never links to itself).', 'anchor-autopilot' );
 			case 'already_linked':
-				return __( 'The destination is already linked on this page, or the per-URL limit is reached.', 'anchor-autopilot' );
+				if ( 'existing' === $detail ) {
+					return __( 'This page already links to the destination (added by hand or by the theme), so no second link is added. Raise "Max links to the same URL" in Settings if you want both.', 'anchor-autopilot' );
+				}
+				return __( 'Another rule already links to this destination on this page (per-URL limit reached).', 'anchor-autopilot' );
+			case 'in_link_same':
+				return __( 'The phrase is already a link to this same destination on this page (added by hand, by the theme or a builder), so it is left as it is.', 'anchor-autopilot' );
+			case 'in_link':
+				/* translators: %s: URL */
+				return sprintf( __( 'The phrase is already a link on this page (to %s), so it is left as it is.', 'anchor-autopilot' ), $detail );
+			case 'protected':
+				return __( 'The phrase only appears in a protected area (heading, menu, button, hidden or similar), which is never linked.', 'anchor-autopilot' );
 			case 'page_cap':
 				return __( 'The maximum number of links per page was reached.', 'anchor-autopilot' );
 			case 'anchor_conflict':
@@ -253,7 +304,7 @@ class AA_Admin {
 	}
 
 	/** Rendered body HTML of a post, the way the site would produce it (builder-aware where possible). */
-	private static function render_post_html( $p ) {
+	public static function render_post_html( $p ) {
 		$html = '';
 		if ( class_exists( '\Elementor\Plugin' ) && get_post_meta( $p->ID, '_elementor_data', true ) ) {
 			try {

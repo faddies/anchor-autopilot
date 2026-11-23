@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0
+- New **Link Report** screen: scan the site once and see, for every rule, which pages it linked on (and how many times), which pages contain the phrase but were skipped (with the reason), and which only contain it in a protected place (heading, menu, hidden, existing link).
+- "Check one page": paste a URL and see exactly what happened on that page.
+- By rule / By page / Rules not linked anywhere views, and CSV download of the whole report.
+- New "Live links" column on the Rules list.
+- Clearer reason when a page already has a hand-made link to the same destination.
+
 ## 1.0.0 – first release
 - Site-wide keyword rules (anchor → URL), added one by one or by CSV upload.
 - Page-specific rules (From page → To URL + anchor), added one by one or by CSV, applied only on the From page.

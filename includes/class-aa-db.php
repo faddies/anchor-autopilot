@@ -11,12 +11,17 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class AA_DB {
 
-	const DB_VERSION = '1.0.0';
+	const DB_VERSION = '1.1.0';
 	const MAX_RULES  = 20000;
 
 	public static function table() {
 		global $wpdb;
 		return $wpdb->prefix . 'aa_rules';
+	}
+
+	public static function log_table() {
+		global $wpdb;
+		return $wpdb->prefix . 'aa_log';
 	}
 
 	public static function install() {
@@ -49,6 +54,22 @@ class AA_DB {
   KEY target_key (target_key)
 ) {$charset};";
 		dbDelta( $sql );
+		$log = self::log_table();
+		$sql2 = "CREATE TABLE {$log} (
+  id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  post_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  rule_id bigint(20) unsigned NOT NULL DEFAULT 0,
+  status varchar(12) NOT NULL DEFAULT 'linked',
+  cnt smallint(5) unsigned NOT NULL DEFAULT 0,
+  anchor_shown varchar(190) NOT NULL DEFAULT '',
+  reason varchar(20) NOT NULL DEFAULT '',
+  detail varchar(190) NOT NULL DEFAULT '',
+  scanned_at datetime NOT NULL,
+  PRIMARY KEY  (id),
+  KEY rule_id (rule_id,status),
+  KEY post_id (post_id)
+) {$charset};";
+		dbDelta( $sql2 );
 		update_option( 'aa_db_version', self::DB_VERSION );
 		self::bump();
 	}

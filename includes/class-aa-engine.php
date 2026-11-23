@@ -207,6 +207,7 @@ class AA_Engine {
 
 		$url_counts = array();
 		$segments   = $this->scan( $parts, $url_counts );
+		$pre_counts = $url_counts; // Links to each destination that were already on the page before we added any.
 		if ( ! $segments ) {
 			return $html;
 		}
@@ -297,6 +298,7 @@ class AA_Engine {
 			}
 
 			$linked_here = 0;
+			$detail      = '';
 			foreach ( $occ as $o ) {
 				list( $si, $s, $e ) = $o;
 				// Reserve the text even when not linked so shorter phrases cannot link a fragment of it.
@@ -311,6 +313,7 @@ class AA_Engine {
 				$have = isset( $url_counts[ $tkey ] ) ? $url_counts[ $tkey ] : 0;
 				if ( $url_cap > 0 && $have >= $url_cap ) {
 					$reason = 'already_linked';
+					$detail = ( isset( $pre_counts[ $tkey ] ) && $pre_counts[ $tkey ] > 0 ) ? 'existing' : 'ours';
 					continue;
 				}
 				if ( $max_total > 0 && $total >= $max_total ) {
@@ -324,7 +327,7 @@ class AA_Engine {
 				$anchor_owner[ $akey ] = $tkey;
 			}
 			if ( '' !== $reason && 0 === $linked_here ) {
-				$report['skipped'][] = $this->skip( $r, $reason, '' );
+				$report['skipped'][] = $this->skip( $r, $reason, 'already_linked' === $reason ? $detail : '' );
 			}
 		}
 

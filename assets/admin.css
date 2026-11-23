@@ -58,3 +58,11 @@
 	.aa-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.aa-two, .aa-grid { grid-template-columns: 1fr; }
 }
+
+.aa-progress { height: 10px; background: #f0f0f1; border-radius: 6px; overflow: hidden; margin: 6px 0 10px; }
+.aa-progress-bar { height: 100%; width: 0; background: #2271b1; transition: width .2s; }
+.aa-check { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0f0f1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.aa-subtabs { display: flex; gap: 16px; margin: 0 0 12px; }
+.aa-subtabs a { text-decoration: none; padding-bottom: 4px; border-bottom: 2px solid transparent; }
+.aa-subtabs a.current { border-bottom-color: #2271b1; font-weight: 600; }
+.aa-live a { text-decoration: none; }

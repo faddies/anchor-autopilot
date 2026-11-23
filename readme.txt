@@ -4,7 +4,7 @@ Tags: internal links, seo, auto link, anchor text, internal linking
 Requires at least: 5.8
 Tested up to: 7.2
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -30,6 +30,7 @@ Links are added at display time. Your saved content is never changed, so turning
 **Tools**
 
 * Test screen: see exactly which links would be added, and why others were skipped, before anything goes live.
+* Link Report: scan once, then see for each rule which pages it links on and why it skipped others, or check a single URL.
 * Conflicts screen: spots overlapping phrases and duplicates.
 * Import / export CSV, with sample files.
 
@@ -55,6 +56,9 @@ Tick "Do not add automatic links on this page" in the Anchor Autopilot box on th
 Keyword rules: anchor, url. Page-specific rules: from, to, anchor.
 
 == Changelog ==
+
+= 1.1.0 =
+Added the Link Report: see where every rule is linked, where it was skipped and why.
 
 = 1.0.0 =
 First release.
