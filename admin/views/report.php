@@ -80,6 +80,17 @@ $pager   = function ( $total, $per, $paged, $args ) use ( $base ) {
 	</form>
 </div>
 
+<?php if ( ! empty( $v['problem_n'] ) && 0 === $v['rule'] && 0 === $v['post'] ) : ?>
+	<div class="notice notice-warning inline">
+		<p><strong><?php echo esc_html( sprintf( /* translators: %d: pages */ _n( '%d page could not be scanned.', '%d pages could not be scanned.', (int) $v['problem_n'], 'anchor-autopilot' ), (int) $v['problem_n'] ) ); ?></strong> <?php esc_html_e( 'Their numbers are missing from this report. Use "Check this page" on them.', 'anchor-autopilot' ); ?></p>
+		<details><summary><?php esc_html_e( 'Show pages', 'anchor-autopilot' ); ?></summary><ul>
+		<?php foreach ( $v['problems'] as $pr ) : ?>
+			<li><?php echo $page_link( $pr->post_id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> &ndash; <?php echo esc_html( $pr->detail ); ?></li>
+		<?php endforeach; ?>
+		</ul></details>
+	</div>
+<?php endif; ?>
+
 <?php if ( $v['rule'] > 0 ) : /* ---------------- one rule ---------------- */ ?>
 	<?php
 	$r = isset( $v['rule_row'] ) ? $v['rule_row'] : null;
@@ -162,6 +173,32 @@ $pager   = function ( $total, $per, $paged, $args ) use ( $base ) {
 			</p>
 		<?php endif; ?>
 	</div>
+	<?php if ( ! empty( $v['probe'] ) ) : $pb = $v['probe']; ?>
+	<div class="aa-card">
+		<h2><?php esc_html_e( 'Live check (the real page as visitors get it)', 'anchor-autopilot' ); ?>
+			<?php if ( 'ran' === $pb['state'] ) : ?><span class="aa-badge aa-badge-on"><?php esc_html_e( 'Plugin ran', 'anchor-autopilot' ); ?></span>
+			<?php else : ?><span class="aa-badge aa-badge-err"><?php esc_html_e( 'Plugin did not link here', 'anchor-autopilot' ); ?></span><?php endif; ?>
+		</h2>
+		<?php if ( 'ran' === $pb['state'] ) : ?>
+			<p>
+			<?php
+			/* translators: %d: number of links */
+			echo esc_html( sprintf( _n( 'The plugin processed this page and added %d link.', 'The plugin processed this page and added %d links.', count( $pb['links'] ), 'anchor-autopilot' ), count( $pb['links'] ) ) );
+			?>
+			</p>
+			<?php if ( $pb['links'] ) : ?>
+				<ul>
+				<?php foreach ( $pb['links'] as $l ) : ?>
+					<li><strong><?php echo esc_html( $l['anchor'] ); ?></strong> &rarr; <code><?php echo esc_html( $short( $l['url'] ) ); ?></code></li>
+				<?php endforeach; ?>
+				</ul>
+				<p class="description"><?php esc_html_e( 'If these do not show for visitors, clear your caching plugin and the builder cache.', 'anchor-autopilot' ); ?></p>
+			<?php endif; ?>
+		<?php else : ?>
+			<p><?php echo esc_html( $pb['message'] ); ?></p>
+		<?php endif; ?>
+	</div>
+	<?php endif; ?>
 	<?php if ( ! $groups['page_off'] ) : ?>
 	<div class="aa-card">
 		<h2><?php esc_html_e( 'Links added', 'anchor-autopilot' ); ?></h2>

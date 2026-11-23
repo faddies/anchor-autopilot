@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.1
+- Fix: links were never added when a theme or page builder (for example an Elementor theme template) prints the page text outside the classic WordPress loop. The plugin now follows the main page query instead.
+- Fix: the Link Report scan showed zeros for Elementor pages because it could not read their text. It now reads the live page (with linking held back), and any page it still cannot read is listed with a warning instead of silently counted as zero.
+- "Check this page" now also loads the real page and reports whether the plugin actually ran on it and which links it added.
+- Large page-builder pages: processing limit raised from 600 KB to 2 MB.
+
 ## 1.1.0
 - New **Link Report** screen: scan the site once and see, for every rule, which pages it linked on (and how many times), which pages contain the phrase but were skipped (with the reason), and which only contain it in a protected place (heading, menu, hidden, existing link).
 - "Check one page": paste a URL and see exactly what happened on that page.

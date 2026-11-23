@@ -13,7 +13,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class AA_Report {
 
-	const CHUNK = 10;
+	const CHUNK = 5;
 
 	/* ------------------------------------------------------------------ */
 	/* Scanning                                                            */
@@ -35,6 +35,64 @@ class AA_Report {
 		return function_exists( 'mb_strtolower' ) ? mb_strtolower( trim( $text ), 'UTF-8' ) : strtolower( trim( $text ) );
 	}
 
+	/** Fetch the live page through a loopback request. Returns array( http_code, body, error ). */
+	private static function loopback( $p, $mode ) {
+		$url = add_query_arg(
+			array(
+				'aa_probe' => self::probe_token_for( $p->ID ),
+				'aa_pid'   => (int) $p->ID,
+				'aa_mode'  => $mode,
+				'aa_nc'    => time(),
+			),
+			get_permalink( $p )
+		);
+		$res = wp_remote_get( $url, array( 'timeout' => 25, 'redirection' => 3, 'sslverify' => apply_filters( 'https_local_ssl_verify', false ), 'user-agent' => 'AnchorAutopilot/' . AA_VERSION . '; ' . home_url( '/' ), 'headers' => array( 'Cache-Control' => 'no-cache' ) ) );
+		if ( is_wp_error( $res ) ) {
+			return array( 0, '', $res->get_error_message() );
+		}
+		return array( (int) wp_remote_retrieve_response_code( $res ), (string) wp_remote_retrieve_body( $res ), '' );
+	}
+
+	private static function probe_token_for( $post_id ) {
+		return AA_Frontend::probe_token( $post_id );
+	}
+
+	/** Reduce a full theme page to the part inside <body> without scripts, so the engine can judge it. */
+	private static function body_only( $html ) {
+		if ( preg_match( '~<body\b[^>]*>(.*)</body>~is', $html, $m ) ) {
+			$html = $m[1];
+		}
+		return preg_replace( '~<(script|style|noscript|template|svg)\b.*?</\1>~is', ' ', $html );
+	}
+
+	/**
+	 * "Check this page": scan it AND load the live page with a one-time token to see whether the
+	 * plugin's filter really runs there. Returns array( state, message, links[] ).
+	 */
+	public static function probe( $p ) {
+		delete_transient( 'aa_probe_' . (int) $p->ID );
+		list( $code, , $err ) = self::loopback( $p, 'run' );
+		if ( $err || $code < 200 || $code >= 300 ) {
+			return array( 'state' => 'fetch_failed', 'message' => $err ? $err : sprintf( /* translators: %d: HTTP status */ __( 'The live page answered with HTTP %d (a firewall, login wall or maintenance mode can cause this).', 'anchor-autopilot' ), $code ), 'links' => array() );
+		}
+		$got = get_transient( 'aa_probe_' . (int) $p->ID );
+		delete_transient( 'aa_probe_' . (int) $p->ID );
+		if ( ! is_array( $got ) || ! $got ) {
+			return array( 'state' => 'not_run', 'message' => __( 'The plugin did not run when this page loaded. The page probably prints its text through a layout or widget that bypasses WordPress\'s standard content filter, or a full-page cache served an old copy. Clear the cache and try again; if it persists, tell the developer which theme or page builder this page uses.', 'anchor-autopilot' ), 'links' => array() );
+		}
+		foreach ( $got as $g ) {
+			if ( 'ran' === $g['state'] ) {
+				return array( 'state' => 'ran', 'message' => '', 'links' => $g['links'] );
+			}
+		}
+		foreach ( $got as $g ) {
+			if ( 'skipped' === $g['state'] ) {
+				return array( 'state' => 'skipped', 'message' => $g['why'], 'links' => array() );
+			}
+		}
+		return array( 'state' => 'blocked', 'message' => isset( $got[0]['why'] ) ? $got[0]['why'] : '', 'links' => array() );
+	}
+
 	/** Scan one post and replace its rows in the log. Returns array( linked, skipped, protected ). */
 	public static function scan_post( $p ) {
 		global $wpdb;
@@ -51,7 +109,15 @@ class AA_Report {
 		}
 
 		$html = AA_Admin::render_post_html( $p );
+		if ( get_post_meta( $p->ID, '_elementor_data', true ) || '' === trim( $html ) ) {
+			// Page builders: read the page as visitors get it, with automatic linking held back, so the text is the real text.
+			list( $code, $body, $err ) = self::loopback( $p, 'raw' );
+			if ( ! $err && $code >= 200 && $code < 300 && '' !== trim( $body ) ) {
+				$html = self::body_only( $body );
+			}
+		}
 		if ( '' === trim( $html ) ) {
+			$wpdb->insert( $log, array( 'post_id' => (int) $p->ID, 'rule_id' => 0, 'status' => 'page_off', 'cnt' => 0, 'anchor_shown' => '', 'reason' => 'unreadable', 'detail' => __( 'The text of this page could not be read by the scan. Use "Check this page" for it.', 'anchor-autopilot' ), 'scanned_at' => $now ) );
 			return $out;
 		}
 		$url      = get_permalink( $p );
@@ -158,7 +224,7 @@ class AA_Report {
 				try {
 					self::scan_post( $post );
 				} catch ( \Throwable $e ) {
-					unset( $e ); // One bad page must not stop the scan.
+					$wpdb->insert( AA_DB::log_table(), array( 'post_id' => (int) $id, 'rule_id' => 0, 'status' => 'page_off', 'cnt' => 0, 'anchor_shown' => '', 'reason' => 'error', 'detail' => mb_substr( __( 'Scan error: ', 'anchor-autopilot' ) . $e->getMessage(), 0, 190 ), 'scanned_at' => current_time( 'mysql', true ) ) ); // One bad page must not stop the scan.
 				}
 			}
 			$scan['last_id'] = (int) $id;
@@ -229,6 +295,9 @@ class AA_Report {
 			'zero'   => (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$rules} r WHERE r.status = 'active' AND NOT EXISTS ( SELECT 1 FROM {$log} l WHERE l.rule_id = r.id AND l.status = 'linked' )" ), // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		);
 
+		$v['problems'] = (array) $wpdb->get_results( "SELECT post_id, detail FROM {$log} WHERE status = 'page_off' ORDER BY id ASC LIMIT 50" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$v['problem_n'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$log} WHERE status = 'page_off'" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
 		// Detail: one rule.
 		if ( $v['rule'] > 0 ) {
 			$v['rule_row'] = AA_DB::get( $v['rule'] );
@@ -239,6 +308,8 @@ class AA_Report {
 		// Detail: one page.
 		if ( $v['post'] > 0 ) {
 			$v['post_obj'] = get_post( $v['post'] );
+			$pr            = get_transient( 'aa_probe_result_' . get_current_user_id() );
+			$v['probe']    = ( is_array( $pr ) && (int) $pr['post'] === $v['post'] ) ? $pr['res'] : null;
 			$v['post_log'] = (array) $wpdb->get_results( $wpdb->prepare( "SELECT l.*, r.anchor AS rule_anchor, r.target_url, r.scope FROM {$log} l LEFT JOIN {$rules} r ON r.id = l.rule_id WHERE l.post_id = %d ORDER BY FIELD(l.status,'linked','skipped','protected','page_off'), l.anchor_shown ASC", $v['post'] ) ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			return $v;
 		}

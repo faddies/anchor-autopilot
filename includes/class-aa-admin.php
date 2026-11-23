@@ -183,6 +183,7 @@ class AA_Admin {
 			self::back( 'aa-report', array( 'tab' => 'page' ) );
 		}
 		AA_Report::scan_post( $p );
+		set_transient( 'aa_probe_result_' . get_current_user_id(), array( 'post' => (int) $p->ID, 'res' => AA_Report::probe( $p ) ), 5 * MINUTE_IN_SECONDS );
 		self::back( 'aa-report', array( 'tab' => 'page', 'post' => $p->ID ) );
 	}
 

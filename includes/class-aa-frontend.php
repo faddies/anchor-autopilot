@@ -50,7 +50,10 @@ class AA_Frontend {
 		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
 			return false;
 		}
-		if ( ! is_singular() || ! in_the_loop() || ! is_main_query() ) {
+		// Use the main query directly: theme builders (Elementor Pro, Divi, etc.) can swap the active query
+		// or output content outside the classic loop, and the page's own text must still be linked.
+		$main = isset( $GLOBALS['wp_the_query'] ) ? $GLOBALS['wp_the_query'] : null;
+		if ( ! $main || ! $main->is_singular() ) {
 			return false;
 		}
 		if ( doing_filter( 'get_the_excerpt' ) || doing_filter( 'wp_trim_excerpt' ) ) {
@@ -69,21 +72,70 @@ class AA_Frontend {
 		if ( self::$running || ! is_string( $content ) || '' === $content ) {
 			return $content;
 		}
+		$probe = self::probe_mode();
 		if ( ! self::should_run() ) {
+			if ( $probe ) {
+				self::probe_store( 0, array( 'state' => 'blocked', 'why' => 'The page is not a normal single-page view, or automatic linking is switched off.' ) );
+			}
 			return $content;
 		}
 		$post = get_post();
-		if ( ! $post || (int) $post->ID !== (int) get_queried_object_id() ) {
+		$main = $GLOBALS['wp_the_query'];
+		if ( ! $post || (int) $post->ID !== (int) $main->get_queried_object_id() ) {
+			if ( $probe ) {
+				self::probe_store( (int) $main->get_queried_object_id(), array( 'state' => 'other', 'why' => 'Content of a different post went through the filter (related posts, widgets); correctly left alone.' ) );
+			}
+			return $content;
+		}
+		if ( 'raw' === $probe ) {
+			self::probe_store( (int) $post->ID, array( 'state' => 'raw' ) );
 			return $content;
 		}
 		self::$running = true;
 		try {
-			$out = self::process_post( $content, $post );
+			if ( $probe ) {
+				$self_url = get_permalink( $post );
+				list( $out, $report ) = self::process_with_report( $content, (int) $post->ID, $self_url );
+				$skip = self::skip_reason( $post );
+				self::probe_store( (int) $post->ID, array( 'state' => '' !== $skip ? 'skipped' : 'ran', 'why' => $skip, 'links' => isset( $report['links'] ) ? $report['links'] : array(), 'bytes' => strlen( $content ) ) );
+				if ( '' !== $skip ) {
+					$out = $content;
+				}
+			} else {
+				$out = self::process_post( $content, $post );
+			}
 		} catch ( \Throwable $e ) {
 			$out = $content; // Never break a page because of a link.
 		}
 		self::$running = false;
 		return is_string( $out ) ? $out : $content;
+	}
+
+	/* ---- Diagnostic probe (used only by the Link Report's "Check this page") ---- */
+
+	public static function probe_token( $post_id, $offset = 0 ) {
+		return substr( wp_hash( 'aa_probe|' . (int) $post_id . '|' . gmdate( 'Y-m-d-H', time() - $offset ) ), 0, 20 );
+	}
+
+	/** '' normally; 'run' or 'raw' when the request carries a valid probe token. */
+	private static function probe_mode() {
+		if ( empty( $_GET['aa_probe'] ) || empty( $_GET['aa_pid'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return '';
+		}
+		$pid = (int) $_GET['aa_pid']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$tok = sanitize_text_field( wp_unslash( $_GET['aa_probe'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! hash_equals( self::probe_token( $pid ), $tok ) && ! hash_equals( self::probe_token( $pid, 3600 ), $tok ) ) {
+			return '';
+		}
+		return ( isset( $_GET['aa_mode'] ) && 'raw' === $_GET['aa_mode'] ) ? 'raw' : 'run'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+	}
+
+	private static function probe_store( $post_id, $data ) {
+		$pid = isset( $_GET['aa_pid'] ) ? (int) $_GET['aa_pid'] : (int) $post_id; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$old = get_transient( 'aa_probe_' . $pid );
+		$old = is_array( $old ) ? $old : array();
+		$old[] = $data;
+		set_transient( 'aa_probe_' . $pid, $old, 10 * MINUTE_IN_SECONDS );
 	}
 
 	/** Why a post is skipped, or '' when it can be processed. */
@@ -115,7 +167,7 @@ class AA_Frontend {
 		if ( '' !== self::skip_reason( $post ) ) {
 			return $content;
 		}
-		if ( strlen( $content ) > (int) apply_filters( 'aa_max_content_bytes', 600000 ) ) {
+		if ( strlen( $content ) > (int) apply_filters( 'aa_max_content_bytes', 2000000 ) ) {
 			return $content;
 		}
 		$self_key = AA_Url::key( get_permalink( $post ) );
