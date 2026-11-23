@@ -253,6 +253,11 @@ class AA_Report {
 		return $scan;
 	}
 
+	/** True when a skip means "this page already has the link": phrase is already a link, or the destination is already linked by hand. */
+	public static function is_already( $reason, $detail ) {
+		return in_array( $reason, array( 'in_link', 'in_link_same' ), true ) || ( 'already_linked' === $reason && 'existing' === $detail );
+	}
+
 	/** Per-rule numbers for the given rule IDs: id => array( pages, links, skipped, prot ). */
 	public static function counts_for( array $ids ) {
 		global $wpdb;
@@ -262,10 +267,10 @@ class AA_Report {
 		}
 		$log  = AA_DB::log_table();
 		$in   = implode( ',', $ids );
-		$rows = $wpdb->get_results( "SELECT rule_id, SUM(status = 'linked') AS pages, SUM(CASE WHEN status = 'linked' THEN cnt ELSE 0 END) AS links, SUM(status = 'skipped') AS skipped, SUM(status = 'protected') AS prot FROM {$log} WHERE rule_id IN ({$in}) GROUP BY rule_id" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( "SELECT rule_id, SUM(status = 'linked') AS pages, SUM(CASE WHEN status = 'linked' THEN cnt ELSE 0 END) AS links, SUM(status = 'skipped') AS skipped, SUM(status = 'protected') AS prot, SUM(status = 'skipped' AND ( reason IN ('in_link','in_link_same') OR ( reason = 'already_linked' AND detail = 'existing' ) )) AS already FROM {$log} WHERE rule_id IN ({$in}) GROUP BY rule_id" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$out  = array();
 		foreach ( (array) $rows as $r ) {
-			$out[ (int) $r->rule_id ] = array( 'pages' => (int) $r->pages, 'links' => (int) $r->links, 'skipped' => (int) $r->skipped, 'prot' => (int) $r->prot );
+			$out[ (int) $r->rule_id ] = array( 'pages' => (int) $r->pages, 'links' => (int) $r->links, 'skipped' => (int) $r->skipped, 'prot' => (int) $r->prot, 'already' => (int) $r->already );
 		}
 		return $out;
 	}
@@ -369,6 +374,10 @@ class AA_Report {
 			foreach ( (array) $rows as $r ) {
 				$last = (int) $r->id;
 				$why  = '';
+				$res  = $r->status;
+				if ( 'skipped' === $r->status && self::is_already( $r->reason, $r->detail ) ) {
+					$res = 'already_linked';
+				}
 				if ( 'page_off' === $r->status ) {
 					$why = $r->detail;
 				} elseif ( 'linked' !== $r->status ) {
@@ -383,7 +392,7 @@ class AA_Report {
 						'page' === $r->scope ? 'one page' : ( $r->scope ? 'whole site' : '' ),
 						self::safe_cell( $r->post_title ),
 						(string) get_permalink( (int) $r->post_id ),
-						$r->status,
+						$res,
 						(int) $r->cnt,
 						self::safe_cell( $why ),
 					)

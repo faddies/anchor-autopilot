@@ -146,12 +146,15 @@ class AA_Rules_Table extends WP_List_Table {
 		if ( 'done' !== $this->scan['state'] ) {
 			return '<a href="' . esc_url( admin_url( 'admin.php?page=aa-report' ) ) . '" class="description">' . esc_html__( 'Not scanned', 'anchor-autopilot' ) . '</a>';
 		}
-		$c = isset( $this->counts[ (int) $item->id ] ) ? $this->counts[ (int) $item->id ] : array( 'pages' => 0, 'links' => 0 );
+		$c = isset( $this->counts[ (int) $item->id ] ) ? $this->counts[ (int) $item->id ] : array( 'pages' => 0, 'links' => 0, 'already' => 0 );
+		$al = isset( $c['already'] ) && $c['already'] > 0
+			? '<br><span class="description">' . esc_html( sprintf( /* translators: %d: pages */ _n( 'already linked on %d page', 'already linked on %d pages', (int) $c['already'], 'anchor-autopilot' ), (int) $c['already'] ) ) . '</span>'
+			: '';
 		if ( 0 === (int) $c['pages'] ) {
-			return '<a href="' . esc_url( $url ) . '"><span class="aa-badge aa-badge-off">' . esc_html__( '0 pages', 'anchor-autopilot' ) . '</span></a>';
+			return '<a href="' . esc_url( $url ) . '"><span class="aa-badge aa-badge-off">' . esc_html__( '0 pages', 'anchor-autopilot' ) . '</span></a>' . $al;
 		}
 		/* translators: 1: links, 2: pages */
-		return '<a href="' . esc_url( $url ) . '">' . esc_html( sprintf( _n( '%1$d link on %2$d page', '%1$d links on %2$d pages', (int) $c['pages'], 'anchor-autopilot' ), (int) $c['links'], (int) $c['pages'] ) ) . '</a>';
+		return '<a href="' . esc_url( $url ) . '">' . esc_html( sprintf( _n( '%1$d link on %2$d page', '%1$d links on %2$d pages', (int) $c['pages'], 'anchor-autopilot' ), (int) $c['links'], (int) $c['pages'] ) ) . '</a>' . $al;
 	}
 
 	protected function column_options( $item ) {

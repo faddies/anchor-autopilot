@@ -4,7 +4,7 @@ Tags: internal links, seo, auto link, anchor text, internal linking
 Requires at least: 5.8
 Tested up to: 7.2
 Requires PHP: 7.4
-Stable tag: 1.1.1
+Stable tag: 1.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -56,6 +56,9 @@ Tick "Do not add automatic links on this page" in the Anchor Autopilot box on th
 Keyword rules: anchor, url. Page-specific rules: from, to, anchor.
 
 == Changelog ==
+
+= 1.1.2 =
+Link Report now shows where a link was skipped because it is already on the page.
 
 = 1.1.1 =
 Fixes linking on page-builder / theme-builder layouts and makes the Link Report read builder pages; "Check this page" now tests the live page.

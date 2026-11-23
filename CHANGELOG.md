@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2
+- Link Report: "already linked" is now reported separately from other skips. New **Already linked** column, an "Already linked on these pages" section on each rule (showing what is already on the page: the same destination, a different URL, or the destination linked elsewhere in the text), and the same on each page's detail.
+- The Rules list shows "already linked on N pages" under Live links, and the CSV marks those rows `already_linked`.
+
 ## 1.1.1
 - Fix: links were never added when a theme or page builder (for example an Elementor theme template) prints the page text outside the classic WordPress loop. The plugin now follows the main page query instead.
 - Fix: the Link Report scan showed zeros for Elementor pages because it could not read their text. It now reads the live page (with linking held back), and any page it still cannot read is listed with a warning instead of silently counted as zero.

@@ -99,9 +99,11 @@ $pager   = function ( $total, $per, $paged, $args ) use ( $base ) {
 		<div class="aa-card"><p><?php esc_html_e( 'That rule no longer exists.', 'anchor-autopilot' ); ?></p><p><a href="<?php echo esc_url( $base ); ?>">&larr; <?php esc_html_e( 'Back to the report', 'anchor-autopilot' ); ?></a></p></div>
 	<?php else : ?>
 		<?php
-		$groups = array( 'linked' => array(), 'skipped' => array(), 'protected' => array() );
+		$groups = array( 'linked' => array(), 'already' => array(), 'skipped' => array(), 'protected' => array() );
 		foreach ( $v['rule_log'] as $row ) {
-			if ( isset( $groups[ $row->status ] ) ) {
+			if ( 'skipped' === $row->status && AA_Report::is_already( $row->reason, $row->detail ) ) {
+				$groups['already'][] = $row;
+			} elseif ( isset( $groups[ $row->status ] ) ) {
 				$groups[ $row->status ][] = $row;
 			}
 		}
@@ -120,6 +122,10 @@ $pager   = function ( $total, $per, $paged, $args ) use ( $base ) {
 				<?php
 				/* translators: 1: number of links, 2: number of pages */
 				echo esc_html( sprintf( __( 'Linked %1$d times on %2$d pages.', 'anchor-autopilot' ), $total_links, count( $groups['linked'] ) ) );
+				if ( $groups['already'] ) {
+					/* translators: %d: number of pages */
+					echo ' ' . esc_html( sprintf( _n( 'Already linked on %d more page.', 'Already linked on %d more pages.', count( $groups['already'] ), 'anchor-autopilot' ), count( $groups['already'] ) ) );
+				}
 				?>
 				<a href="<?php echo esc_url( admin_url( 'admin.php?page=aa-rules&action=edit&id=' . (int) $r->id ) ); ?>"><?php esc_html_e( 'Edit rule', 'anchor-autopilot' ); ?></a>
 			</p>
@@ -138,9 +144,32 @@ $pager   = function ( $total, $per, $paged, $args ) use ( $base ) {
 			<?php endif; ?>
 		</div>
 
+		<?php if ( $groups['already'] ) : ?>
+		<div class="aa-card">
+			<h2><?php esc_html_e( 'Already linked on these pages', 'anchor-autopilot' ); ?> <span class="aa-badge aa-badge-kw"><?php echo (int) count( $groups['already'] ); ?></span></h2>
+			<p class="description"><?php esc_html_e( 'The link is already on the page (added by hand, by your theme or a builder), so nothing was added. This is why these pages are not counted as linked above.', 'anchor-autopilot' ); ?></p>
+			<table class="widefat striped aa-table"><thead><tr><th><?php esc_html_e( 'Page', 'anchor-autopilot' ); ?></th><th><?php esc_html_e( 'Existing link', 'anchor-autopilot' ); ?></th></tr></thead><tbody>
+			<?php foreach ( $groups['already'] as $row ) : ?>
+				<tr><td><?php echo $page_link( $row->post_id, $row->post_title ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></td><td>
+				<?php
+				if ( 'in_link_same' === $row->reason ) {
+					esc_html_e( 'The phrase is already a link to this same destination.', 'anchor-autopilot' );
+				} elseif ( 'in_link' === $row->reason ) {
+					/* translators: %s: URL */
+					echo esc_html( sprintf( __( 'The phrase is already a link, pointing to %s.', 'anchor-autopilot' ), $row->detail ) );
+				} else {
+					esc_html_e( 'The page already links to this destination elsewhere in its text.', 'anchor-autopilot' );
+				}
+				?>
+				</td></tr>
+			<?php endforeach; ?>
+			</tbody></table>
+		</div>
+		<?php endif; ?>
+
 		<?php if ( $groups['skipped'] || $groups['protected'] ) : ?>
 		<div class="aa-card">
-			<h2><?php esc_html_e( 'Pages where the phrase is present but was not linked', 'anchor-autopilot' ); ?> <span class="aa-badge"><?php echo (int) ( count( $groups['skipped'] ) + count( $groups['protected'] ) ); ?></span></h2>
+			<h2><?php esc_html_e( 'Other pages where the phrase is present but was not linked', 'anchor-autopilot' ); ?> <span class="aa-badge"><?php echo (int) ( count( $groups['skipped'] ) + count( $groups['protected'] ) ); ?></span></h2>
 			<table class="widefat striped aa-table"><thead><tr><th><?php esc_html_e( 'Page', 'anchor-autopilot' ); ?></th><th><?php esc_html_e( 'Why', 'anchor-autopilot' ); ?></th></tr></thead><tbody>
 			<?php foreach ( array_merge( $groups['skipped'], $groups['protected'] ) as $row ) : ?>
 				<tr><td><?php echo $page_link( $row->post_id, $row->post_title ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></td><td><?php echo esc_html( AA_Admin::reason_label( $row->reason, $row->detail ) ); ?></td></tr>
@@ -152,9 +181,11 @@ $pager   = function ( $total, $per, $paged, $args ) use ( $base ) {
 
 <?php elseif ( $v['post'] > 0 ) : /* ---------------- one page ---------------- */ ?>
 	<?php
-	$groups = array( 'linked' => array(), 'skipped' => array(), 'protected' => array(), 'page_off' => array() );
+	$groups = array( 'linked' => array(), 'already' => array(), 'skipped' => array(), 'protected' => array(), 'page_off' => array() );
 	foreach ( $v['post_log'] as $row ) {
-		if ( isset( $groups[ $row->status ] ) ) {
+		if ( 'skipped' === $row->status && AA_Report::is_already( $row->reason, $row->detail ) ) {
+			$groups['already'][] = $row;
+		} elseif ( isset( $groups[ $row->status ] ) ) {
 			$groups[ $row->status ][] = $row;
 		}
 	}
@@ -212,6 +243,16 @@ $pager   = function ( $total, $per, $paged, $args ) use ( $base ) {
 			<p><?php esc_html_e( 'No automatic links on this page.', 'anchor-autopilot' ); ?></p>
 		<?php endif; ?>
 	</div>
+	<?php if ( $groups['already'] ) : ?>
+	<div class="aa-card">
+		<h2><?php esc_html_e( 'Already linked (not added again)', 'anchor-autopilot' ); ?> <span class="aa-badge aa-badge-kw"><?php echo (int) count( $groups['already'] ); ?></span></h2>
+		<table class="widefat striped aa-table"><thead><tr><th><?php esc_html_e( 'Phrase', 'anchor-autopilot' ); ?></th><th><?php esc_html_e( 'Rule links to', 'anchor-autopilot' ); ?></th><th><?php esc_html_e( 'What is already on the page', 'anchor-autopilot' ); ?></th></tr></thead><tbody>
+		<?php foreach ( $groups['already'] as $row ) : ?>
+			<tr><td><strong><?php echo esc_html( $row->anchor_shown ); ?></strong></td><td><code><?php echo esc_html( $short( $row->target_url ) ); ?></code></td><td><?php echo esc_html( AA_Admin::reason_label( $row->reason, $row->detail ) ); ?></td></tr>
+		<?php endforeach; ?>
+		</tbody></table>
+	</div>
+	<?php endif; ?>
 	<?php if ( $groups['skipped'] || $groups['protected'] ) : ?>
 	<div class="aa-card">
 		<h2><?php esc_html_e( 'Matched but not linked', 'anchor-autopilot' ); ?></h2>
@@ -271,17 +312,19 @@ $pager   = function ( $total, $per, $paged, $args ) use ( $base ) {
 					<th><?php esc_html_e( 'Links to', 'anchor-autopilot' ); ?></th>
 					<th><?php esc_html_e( 'Pages linked', 'anchor-autopilot' ); ?></th>
 					<th><?php esc_html_e( 'Total links', 'anchor-autopilot' ); ?></th>
-					<th><?php esc_html_e( 'Skipped', 'anchor-autopilot' ); ?></th>
+					<th><?php esc_html_e( 'Already linked', 'anchor-autopilot' ); ?></th>
+					<th><?php esc_html_e( 'Other skips', 'anchor-autopilot' ); ?></th>
 					<th></th>
 				</tr></thead><tbody>
 				<?php foreach ( $v['rows'] as $row ) : ?>
-					<?php $c = isset( $v['counts'][ (int) $row->id ] ) ? $v['counts'][ (int) $row->id ] : array( 'pages' => 0, 'links' => 0, 'skipped' => 0, 'prot' => 0 ); ?>
+					<?php $c = isset( $v['counts'][ (int) $row->id ] ) ? $v['counts'][ (int) $row->id ] : array( 'pages' => 0, 'links' => 0, 'skipped' => 0, 'prot' => 0, 'already' => 0 ); ?>
 					<tr>
 						<td><strong><?php echo esc_html( $row->anchor ); ?></strong> <?php echo 'page' === $row->scope ? '<span class="aa-badge aa-badge-page">' . esc_html__( 'One page', 'anchor-autopilot' ) . '</span>' : ''; ?><?php echo 'paused' === $row->status ? ' <span class="aa-badge aa-badge-off">' . esc_html__( 'Paused', 'anchor-autopilot' ) . '</span>' : ''; ?></td>
 						<td><code><?php echo esc_html( $short( $row->target_url ) ); ?></code></td>
 						<td><?php echo $scanned ? (int) $c['pages'] : '&mdash;'; ?></td>
 						<td><?php echo $scanned ? (int) $c['links'] : '&mdash;'; ?></td>
-						<td><?php echo $scanned ? (int) ( $c['skipped'] + $c['prot'] ) : '&mdash;'; ?></td>
+						<td><?php echo $scanned ? ( $c['already'] ? '<span class="aa-badge aa-badge-kw">' . (int) $c['already'] . '</span>' : '0' ) : '&mdash;'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></td>
+						<td><?php echo $scanned ? (int) ( $c['skipped'] + $c['prot'] - $c['already'] ) : '&mdash;'; ?></td>
 						<td><a href="<?php echo $detail_url( array( 'rule' => (int) $row->id ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>"><?php esc_html_e( 'See pages', 'anchor-autopilot' ); ?></a></td>
 					</tr>
 				<?php endforeach; ?>
